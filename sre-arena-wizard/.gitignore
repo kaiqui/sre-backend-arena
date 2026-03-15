@@ -1,0 +1,12 @@
+.gradle/
+build/
+*.jar
+.idea/
+*.iml
+*.class
+.DS_Store
+.env
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - EXTERNAL_API_URL=https://api.potterdb.com/v1
+      - CACHE_TTL_SECONDS=300
+      - RATE_LIMIT_PER_MIN=90
+      - DD_AGENT_HOST=datadog-agent
+    networks:
+      - sre-network
+
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:latest
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APM_ENABLED=true
+      - DD_LOGS_ENABLED=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+    networks:
+      - sre-network
+
+networks:
+  sre-network:
+    driver: bridge

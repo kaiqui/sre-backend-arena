@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pokemon-battle-api
+  namespace: sre
+spec:
+  type: ClusterIP
+  selector:
+    app: pokemon-battle-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000
+    protocol: TCP

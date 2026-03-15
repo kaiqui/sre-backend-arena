@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - POKEAPI_BASE_URL=https://pokeapi.co/api/v2
+      - RATE_LIMIT_PER_MIN=90
+      - DD_AGENT_HOST=datadog-agent
+      - DD_ENV=development
+    networks:
+      - sre-network
+
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:latest
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_APM_ENABLED=true
+      - DD_LOGS_ENABLED=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
+    networks:
+      - sre-network
+
+networks:
+  sre-network:
+    driver: bridge

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pokemon-battle-api
+  namespace: sre
+  labels:
+    app: pokemon-battle-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pokemon-battle-api
+  template:
+    metadata:
+      labels:
+        app: pokemon-battle-api
+      annotations:
+        ad.datadoghq.com/pokemon-battle-api.logs: '[{"source": "nodejs", "service": "pokemon-battle-api"}]'
+    spec:
+      containers:
+      - name: pokemon-battle-api
+        image: pokemon-battle-api:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
