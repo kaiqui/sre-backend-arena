@@ -1,16 +1,28 @@
 import pytest
-from fastapi.testclient import TestClient
-from src.main import app
+from httpx import AsyncClient
 
-client = TestClient(app)
-
-def test_analyze_invalid_ship():
-    response = client.post("/api/deathstar/analyze/99999")
-    assert response.status_code == 404
-
-def test_threat_statistics():
-    response = client.get("/api/deathstar/threat-statistics")
+@pytest.mark.asyncio
+async def test_analyze_ship_success(client: AsyncClient):
+    response = await client.get("/deathstar-analysis/9")
     assert response.status_code == 200
     data = response.json()
-    assert "total_ships_analyzed" in data
-    assert "average_risk_score" in data
+    assert "ship" in data
+    assert "threatScore" in data
+    assert "classification" in data
+    assert 0 <= data["threatScore"] <= 100
+
+@pytest.mark.asyncio
+async def test_analyze_ship_invalid_id(client: AsyncClient):
+    response = await client.get("/deathstar-analysis/999999")
+    assert response.status_code in [404, 503]
+
+@pytest.mark.asyncio
+async def test_health_live(client: AsyncClient):
+    response = await client.get("/health/live")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+@pytest.mark.asyncio
+async def test_health_ready(client: AsyncClient):
+    response = await client.get("/health/ready")
+    assert response.status_code in [200, 503]

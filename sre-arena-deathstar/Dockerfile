@@ -1,28 +1,41 @@
-FROM python:3.11-slim as builder
-
+# Build stage
+FROM python:3.11-slim AS build
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
+# Runtime stage
 FROM python:3.11-slim
-
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# Install Datadog APM
+RUN pip install --no-cache-dir ddtrace
 
-COPY --from=builder /root/.local /root/.local
-COPY src/ ./src/
+# Create non-root user
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# Copy application
+COPY --from=build /app/src ./src
+COPY --from=build /app/requirements.txt .
+RUN chown -R appuser:appgroup /app
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health/live || exit 1
+USER appuser
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')" || exit 1
+
+# Expose port
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DD_SERVICE=deathstar-analysis-api
+ENV DD_ENV=production
+ENV DD_VERSION=1.0.0
+ENV DD_TRACE_ENABLED=true
+
+# Start application
+CMD ["ddtrace-run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

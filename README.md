@@ -66,6 +66,8 @@ Construir **um serviço HTTP com um endpoint** que integre com APIs públicas e 
 
 > ⚠️ Para ranking justo, todos os candidatos no mesmo cenário são comparados diretamente.
 
+> ℹ️ **Atenção:** Cada cenário utiliza uma API pública com rate limit. É responsabilidade do candidato verificar os limites da API escolhida e garantir que sua solução os respeite.
+
 ---
 
 ### 🔮 Cenário 1 — Wizard Intelligence Network (Harry Potter)
@@ -100,13 +102,6 @@ GET /wizard/{name}
   "powerScore": 87
 }
 ```
-
-#### ⚠️ Rate Limit da API
-| API | Rate Limit |
-|-----|------------|
-| The Harry Potter API | **100 requests/min** |
-
-> 🚨 **Violar o rate limit = Desclassificação**
 
 ---
 
@@ -145,13 +140,6 @@ GET /deathstar-analysis/{shipId}
 }
 ```
 
-#### ⚠️ Rate Limit da API
-| API | Rate Limit |
-|-----|------------|
-| SWAPI | **~1000 requests/hour** |
-
-> 🚨 **Violar o rate limit = Desclassificação**
-
 ---
 
 ### ⚔️ Cenário 3 — Pokémon Battle Arena (Pokémon)
@@ -186,13 +174,6 @@ GET /battle?pokemonA={name}&pokemonB={name}
   "reason": "higher_total_stats"
 }
 ```
-
-#### ⚠️ Rate Limit da API
-| API | Rate Limit |
-|-----|------------|
-| PokéAPI | **~100 requests/min** |
-
-> 🚨 **Violar o rate limit = Desclassificação**
 
 ---
 

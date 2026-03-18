@@ -1,30 +1,32 @@
 import asyncio
-import logging
 import random
 from functools import wraps
 from typing import Callable, Any
+from src.config.settings import settings
+from src.observability.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
-def retry(max_attempts: int = 3, backoff: float = 2.0, jitter: bool = True, exceptions: tuple = (Exception,)):
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
-            attempt = 0
-            last_exception = None
-            while attempt < max_attempts:
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    attempt += 1
-                    if attempt < max_attempts:
-                        wait_time = backoff ** (attempt - 1)
-                        if jitter:
-                            wait_time += random.uniform(0, wait_time * 0.1)
-                        logger.warning(f"Attempt {attempt} failed for {func.__name__}, retrying in {wait_time:.2f}s")
-                        await asyncio.sleep(wait_time)
-            logger.error(f"All {max_attempts} attempts failed for {func.__name__}")
-            raise last_exception
-        return wrapper
-    return decorator
+def retry_with_backoff(func: Callable) -> Callable:
+    @wraps(func)
+    async def wrapper(*args, **kwargs) -> Any:
+        last_exception = None
+        
+        for attempt in range(1, settings.RETRY_MAX_ATTEMPTS + 1):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                
+                if attempt < settings.RETRY_MAX_ATTEMPTS:
+                    # Exponential backoff with jitter
+                    delay = (settings.RETRY_DELAY_MS * (2 ** (attempt - 1))) / 1000
+                    jitter = random.uniform(0, delay * 0.1)
+                    total_delay = delay + jitter
+                    
+                    logger.debug(f"Retry attempt {attempt}/{settings.RETRY_MAX_ATTEMPTS} after {total_delay:.2f}s")
+                    await asyncio.sleep(total_delay)
+        
+        raise last_exception
+    
+    return wrapper

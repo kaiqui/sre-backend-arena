@@ -1,41 +1,56 @@
-import aiohttp
+import httpx
 import asyncio
-import logging
-from typing import Optional, Dict
-from src.config.settings import Settings
+from typing import Dict, Any
+from src.config.settings import settings
+from src.observability.metrics import metrics
+from src.observability.logging import get_logger
+from src.resilience.circuit_breaker import circuit_breaker
+from src.resilience.retry import retry_with_backoff
+from src.resilience.rate_limiter import rate_limiter
 
-logger = logging.getLogger(__name__)
-settings = Settings()
+logger = get_logger(__name__)
 
-class ExternalAPIService:
+class ExternalApiService:
     def __init__(self):
-        self.base_url = settings.STAR_WARS_API_BASE_URL
-        self.timeout = settings.STAR_WARS_API_TIMEOUT
-
-    async def get_ship(self, ship_id: str) -> Optional[Dict]:
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(settings.EXTERNAL_API_TIMEOUT_MS / 1000),
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=50),
+        )
+    
+    @circuit_breaker
+    @retry_with_backoff
+    @rate_limiter
+    async def fetch_ship(self, ship_id: int) -> Dict[str, Any]:
+        start_time = asyncio.get_event_loop().time()
+        
         try:
-            async with aiohttp.ClientSession() as session:
-                url = f"{self.base_url}/starships/{ship_id}/"
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    elif response.status == 404:
-                        logger.warning(f"Ship {ship_id} not found")
-                        return None
-                    else:
-                        raise Exception(f"API returned {response.status}")
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout fetching ship {ship_id}")
+            url = f"{settings.SWAPI_URL}/starships/{ship_id}/"
+            response = await self._client.get(url)
+            response.raise_for_status()
+            
+            duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+            metrics.record_latency("api.external.latency", duration_ms)
+            metrics.increment("api.external.success")
+            
+            logger.info(f"External API call successful: ship {ship_id} ({duration_ms:.2f}ms)")
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                metrics.increment("api.external.429")
+                logger.warning(f"Rate limit hit for ship {ship_id}")
+            duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+            metrics.record_latency("api.external.latency", duration_ms)
+            metrics.increment("api.external.error")
+            logger.error(f"External API call failed: ship {ship_id}", exc_info=True)
             raise
         except Exception as e:
-            logger.error(f"Error fetching ship {ship_id}: {str(e)}")
+            duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+            metrics.record_latency("api.external.latency", duration_ms)
+            metrics.increment("api.external.error")
+            logger.error(f"External API call failed: ship {ship_id}", exc_info=True)
             raise
+    
+    async def close(self) -> None:
+        await self._client.aclose()
 
-    async def health_check(self) -> bool:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/", timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    return response.status == 200
-        except Exception as e:
-            logger.error(f"Health check failed: {str(e)}")
-            return False
+external_api_service = ExternalApiService()

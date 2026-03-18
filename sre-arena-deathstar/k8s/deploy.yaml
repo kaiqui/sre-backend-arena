@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sre-arena
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deathstar-analysis-api
+  namespace: sre-arena
+  labels:
+    app: deathstar-analysis-api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: deathstar-analysis-api
+  template:
+    metadata:
+      labels:
+        app: deathstar-analysis-api
+        version: v1
+      annotations:
+        ad.datadoghq.com/deathstar-analysis-api.logs: '[{"source":"deathstar-analysis-api","service":"deathstar-analysis-api"}]'
+    spec:
+      serviceAccountName: deathstar-analysis-api-sa
+      containers:
+      - name: deathstar-analysis-api
+        image: your-registry/deathstar-analysis-api:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "8000"
+        - name: DD_ENV
+          value: "production"
+        - name: DD_SERVICE
+          value: "deathstar-analysis-api"
+        - name: DD_VERSION
+          value: "1.0.0"
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: SWAPI_URL
+          value: "https://swapi.dev/api"
+        - name: CACHE_TTL_SECONDS
+          value: "300"
+        - name: RATE_LIMIT_PER_HOUR
+          value: "900"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: deathstar-analysis-api
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deathstar-analysis-api
+  namespace: sre-arena
+spec:
+  selector:
+    app: deathstar-analysis-api
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: deathstar-analysis-api
+  namespace: sre-arena
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  - host: deathstar-api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: deathstar-analysis-api
+            port:
+              number: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: deathstar-analysis-api-hpa
+  namespace: sre-arena
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: deathstar-analysis-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
